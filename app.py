@@ -3,7 +3,7 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-ALEXA_SKILL_ID = "amzn1.ask.skill.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+ALEXA_SKILL_ID = "amzn1.ask.skill.878d739f-cf0e-4a7c-ad7c-c2bc5143bffc"
 
 RESERVATION = {
     "reservation_id": 558,
