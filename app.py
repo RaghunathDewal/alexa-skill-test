@@ -1,21 +1,17 @@
 # app.py
-from flask import Flask, render_template
-from ask_sdk_core.skill_builder import SkillBuilder
-from ask_sdk_core.dispatch_components import AbstractRequestHandler
-from ask_sdk_core.utils import is_intent_name, is_request_type
-from ask_sdk_core.handler_input import HandlerInput
-from ask_sdk_model import Response
-from flask_ask_sdk.skill_adapter import SkillAdapter
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
-sb = SkillBuilder()
+
+# ⚠️ Replace with your actual Skill ID from the Developer Console
+# (Endpoint page, or top of the skill's Build page)
+ALEXA_SKILL_ID = "amzn1.ask.skill.878d739f-cf0e-4a7c-ad7c-c2bc5143bffc"
 
 # Mock data
 RESERVATION = {
-    "name": "sample reservation",
+    "guests": "2 guests",
     "date": "August 10th",
     "time": "7 PM",
-    "guests": "2 guests",
     "location": "Downtown branch"
 }
 
@@ -26,70 +22,83 @@ ORDER = {
     "eta": "2 days"
 }
 
-class LaunchRequestHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input):
-        return is_request_type("LaunchRequest")(handler_input)
 
-    def handle(self, handler_input):
-        speech = "Welcome! You can ask me about your reservation or your order."
-        return handler_input.response_builder.speak(speech).ask(speech).response
+def build_response(speech_text, end_session=True):
+    return jsonify({
+        "version": "1.0",
+        "response": {
+            "outputSpeech": {"type": "PlainText", "text": speech_text},
+            "shouldEndSession": end_session
+        }
+    })
 
-class GetReservationIntentHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input):
-        return is_intent_name("GetReservationIntent")(handler_input)
 
-    def handle(self, handler_input):
-        r = RESERVATION
-        speech = (f"Your reservation is for {r['guests']} on {r['date']} "
-                  f"at {r['time']}, at {r['location']}.")
-        return handler_input.response_builder.speak(speech).response
+def get_app_id(data):
+    return (
+        data.get("session", {}).get("application", {}).get("applicationId")
+        or data.get("context", {}).get("System", {}).get("application", {}).get("applicationId")
+    )
 
-class GetOrderIntentHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input):
-        return is_intent_name("GetOrderIntent")(handler_input)
-
-    def handle(self, handler_input):
-        o = ORDER
-        speech = (f"Your order {o['order_id']} for {o['item']} is currently "
-                  f"{o['status']}, arriving in {o['eta']}.")
-        return handler_input.response_builder.speak(speech).response
-
-class HelpIntentHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input):
-        return is_intent_name("AMAZON.HelpIntent")(handler_input)
-
-    def handle(self, handler_input):
-        speech = "You can ask about your reservation or your order status."
-        return handler_input.response_builder.speak(speech).ask(speech).response
-
-class CancelOrStopIntentHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input):
-        return (is_intent_name("AMAZON.CancelIntent")(handler_input) or
-                is_intent_name("AMAZON.StopIntent")(handler_input))
-
-    def handle(self, handler_input):
-        speech = "Goodbye!"
-        return handler_input.response_builder.speak(speech).response
-
-class SessionEndedRequestHandler(AbstractRequestHandler):
-    def can_handle(self, handler_input):
-        return is_request_type("SessionEndedRequest")(handler_input)
-
-    def handle(self, handler_input):
-        return handler_input.response_builder.response
-
-sb.add_request_handler(LaunchRequestHandler())
-sb.add_request_handler(GetReservationIntentHandler())
-sb.add_request_handler(GetOrderIntentHandler())
-sb.add_request_handler(HelpIntentHandler())
-sb.add_request_handler(CancelOrStopIntentHandler())
-sb.add_request_handler(SessionEndedRequestHandler())
-
-skill_adapter = SkillAdapter(skill=sb.create(), skill_id="amzn1.ask.skill.878d739f-cf0e-4a7c-ad7c-c2bc5143bffc", app=app)
 
 @app.route("/", methods=["POST"])
-def invoke_skill():
-    return skill_adapter.dispatch_request()
+def alexa_endpoint():
+    data = request.get_json(silent=True)
+
+    if not data:
+        return jsonify({"error": "Invalid request body"}), 400
+
+    app_id = get_app_id(data)
+    if app_id != ALEXA_SKILL_ID:
+        return jsonify({"error": "Invalid skill ID"}), 403
+
+    req_type = data["request"]["type"]
+
+    if req_type == "LaunchRequest":
+        return build_response(
+            "Welcome! You can ask me about your reservation or your order.",
+            end_session=False
+        )
+
+    if req_type == "IntentRequest":
+        intent_name = data["request"]["intent"]["name"]
+
+        if intent_name == "GetReservationIntent":
+            r = RESERVATION
+            speech = (f"Your reservation is for {r['guests']} on {r['date']} "
+                      f"at {r['time']}, at {r['location']}.")
+            return build_response(speech)
+
+        if intent_name == "GetOrderIntent":
+            o = ORDER
+            speech = (f"Your order {o['order_id']} for {o['item']} is currently "
+                      f"{o['status']}, arriving in {o['eta']}.")
+            return build_response(speech)
+
+        if intent_name == "AMAZON.HelpIntent":
+            return build_response(
+                "You can ask about your reservation or your order status.",
+                end_session=False
+            )
+
+        if intent_name in ("AMAZON.CancelIntent", "AMAZON.StopIntent"):
+            return build_response("Goodbye!")
+
+        if intent_name == "AMAZON.FallbackIntent":
+            return build_response(
+                "Sorry, I didn't catch that. You can ask about your reservation or order.",
+                end_session=False
+            )
+
+    if req_type == "SessionEndedRequest":
+        return jsonify({"version": "1.0", "response": {}})
+
+    return build_response("Sorry, I didn't understand that.", end_session=False)
+
+
+@app.route("/", methods=["GET"])
+def health_check():
+    return "Alexa skill backend is running", 200
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
