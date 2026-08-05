@@ -85,7 +85,7 @@ sb.add_request_handler(HelpIntentHandler())
 sb.add_request_handler(CancelOrStopIntentHandler())
 sb.add_request_handler(SessionEndedRequestHandler())
 
-skill_adapter = SkillAdapter(skill=sb.create(), skill_id=None, app=app)
+skill_adapter = SkillAdapter(skill=sb.create(), skill_id="amzn1.ask.skill.878d739f-cf0e-4a7c-ad7c-c2bc5143bffc", app=app)
 
 @app.route("/", methods=["POST"])
 def invoke_skill():
